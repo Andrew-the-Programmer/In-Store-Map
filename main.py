@@ -5,15 +5,16 @@ from fastapi.templating import Jinja2Templates
 from typing import Optional
 import json
 import os
-import pathlib
+from pathlib import Path
 
 app = FastAPI()
 
-pathlib.Path("data").mkdir(exist_ok=True)
-pathlib.Path("static/svgs").mkdir(parents=True, exist_ok=True)
-
+Path("data").mkdir(exist_ok=True)
+Path("static/svgs").mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+
+BASE_DIR = Path(__file__).parent.resolve()
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 PRODUCTS_FILE = "data/products.json"
 VOXELS_FILE = "data/voxels.json"
@@ -37,7 +38,7 @@ def opt_float(s: Optional[str]) -> Optional[float]:
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html")
 
 
 @app.get("/table", response_class=HTMLResponse)
@@ -45,13 +46,15 @@ async def table_view(request: Request):
     products = read_json(PRODUCTS_FILE)
     voxels = {v["product_id"]: v for v in read_json(VOXELS_FILE)}
     rows = [{**p, **voxels.get(p["product_id"], {})} for p in products]
-    return templates.TemplateResponse("table.html", {"request": request, "rows": rows})
+    return templates.TemplateResponse(
+        request=request, name="table.html", context={"rows": rows}
+    )
 
 
 @app.get("/form", response_class=HTMLResponse)
 async def form_new(request: Request):
     return templates.TemplateResponse(
-        "form.html", {"request": request, "p": None, "v": None}
+        request=request, name="form.html", context={"p": None, "v": None}
     )
 
 
@@ -63,7 +66,9 @@ async def form_edit(request: Request, product_id: str):
     if not p:
         raise HTTPException(404)
     return templates.TemplateResponse(
-        "form.html", {"request": request, "p": p, "v": voxels.get(product_id)}
+        request=request,
+        name="form.html",
+        context={"p": p, "v": voxels.get(product_id)},
     )
 
 
@@ -194,12 +199,16 @@ def get_map_items():
 @app.get("/map2d", response_class=HTMLResponse)
 async def map2d(request: Request):
     return templates.TemplateResponse(
-        "map2d.html", {"request": request, "items_json": json.dumps(get_map_items())}
+        request=request,
+        name="map2d.html",
+        context={"items_json": json.dumps(get_map_items())},
     )
 
 
 @app.get("/map3d", response_class=HTMLResponse)
 async def map3d(request: Request):
     return templates.TemplateResponse(
-        "map3d.html", {"request": request, "items_json": json.dumps(get_map_items())}
+        request=request,
+        name="map3d.html",
+        context={"request": request, "items_json": json.dumps(get_map_items())},
     )
