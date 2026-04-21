@@ -3,7 +3,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from typing import Optional
-import json, os, pathlib
+import json
+import os
+import pathlib
 
 app = FastAPI()
 
@@ -48,7 +50,9 @@ async def table_view(request: Request):
 
 @app.get("/form", response_class=HTMLResponse)
 async def form_new(request: Request):
-    return templates.TemplateResponse("form.html", {"request": request, "p": None, "v": None})
+    return templates.TemplateResponse(
+        "form.html", {"request": request, "p": None, "v": None}
+    )
 
 
 @app.get("/form/{product_id}", response_class=HTMLResponse)
@@ -58,7 +62,9 @@ async def form_edit(request: Request, product_id: str):
     p = next((x for x in products if x["product_id"] == product_id), None)
     if not p:
         raise HTTPException(404)
-    return templates.TemplateResponse("form.html", {"request": request, "p": p, "v": voxels.get(product_id)})
+    return templates.TemplateResponse(
+        "form.html", {"request": request, "p": p, "v": voxels.get(product_id)}
+    )
 
 
 @app.post("/product/new")
@@ -78,18 +84,29 @@ async def create_product(
     products = read_json(PRODUCTS_FILE)
     if any(p["product_id"] == product_id for p in products):
         raise HTTPException(400, "product_id already exists")
-    products.append({
-        "product_id": product_id, "name": name,
-        "svg_filepath": svg_filepath, "description": description, "color": color,
-    })
+    products.append(
+        {
+            "product_id": product_id,
+            "name": name,
+            "svg_filepath": svg_filepath,
+            "description": description,
+            "color": color,
+        }
+    )
     write_json(PRODUCTS_FILE, products)
 
     voxels = read_json(VOXELS_FILE)
-    voxels.append({
-        "product_id": product_id,
-        "x": x, "y": y, "z": opt_float(z),
-        "dx": dx, "dy": dy, "dz": opt_float(dz),
-    })
+    voxels.append(
+        {
+            "product_id": product_id,
+            "x": x,
+            "y": y,
+            "z": opt_float(z),
+            "dx": dx,
+            "dy": dy,
+            "dz": opt_float(dz),
+        }
+    )
     write_json(VOXELS_FILE, voxels)
     return RedirectResponse("/table", status_code=303)
 
@@ -111,45 +128,78 @@ async def edit_product(
     products = read_json(PRODUCTS_FILE)
     for p in products:
         if p["product_id"] == product_id:
-            p.update({"name": name, "svg_filepath": svg_filepath,
-                      "description": description, "color": color})
+            p.update(
+                {
+                    "name": name,
+                    "svg_filepath": svg_filepath,
+                    "description": description,
+                    "color": color,
+                }
+            )
     write_json(PRODUCTS_FILE, products)
 
     voxels = read_json(VOXELS_FILE)
     updated = False
     for v in voxels:
         if v["product_id"] == product_id:
-            v.update({"x": x, "y": y, "z": opt_float(z), "dx": dx, "dy": dy, "dz": opt_float(dz)})
+            v.update(
+                {
+                    "x": x,
+                    "y": y,
+                    "z": opt_float(z),
+                    "dx": dx,
+                    "dy": dy,
+                    "dz": opt_float(dz),
+                }
+            )
             updated = True
     if not updated:
-        voxels.append({"product_id": product_id, "x": x, "y": y, "z": opt_float(z),
-                       "dx": dx, "dy": dy, "dz": opt_float(dz)})
+        voxels.append(
+            {
+                "product_id": product_id,
+                "x": x,
+                "y": y,
+                "z": opt_float(z),
+                "dx": dx,
+                "dy": dy,
+                "dz": opt_float(dz),
+            }
+        )
     write_json(VOXELS_FILE, voxels)
     return RedirectResponse("/table", status_code=303)
 
 
 @app.post("/product/{product_id}/delete")
 async def delete_product(product_id: str):
-    write_json(PRODUCTS_FILE, [p for p in read_json(PRODUCTS_FILE) if p["product_id"] != product_id])
-    write_json(VOXELS_FILE, [v for v in read_json(VOXELS_FILE) if v["product_id"] != product_id])
+    write_json(
+        PRODUCTS_FILE,
+        [p for p in read_json(PRODUCTS_FILE) if p["product_id"] != product_id],
+    )
+    write_json(
+        VOXELS_FILE,
+        [v for v in read_json(VOXELS_FILE) if v["product_id"] != product_id],
+    )
     return RedirectResponse("/table", status_code=303)
 
 
 def get_map_items():
     products = {p["product_id"]: p for p in read_json(PRODUCTS_FILE)}
-    return [{**products[v["product_id"]], **v}
-            for v in read_json(VOXELS_FILE) if v["product_id"] in products]
+    return [
+        {**products[v["product_id"]], **v}
+        for v in read_json(VOXELS_FILE)
+        if v["product_id"] in products
+    ]
 
 
 @app.get("/map2d", response_class=HTMLResponse)
 async def map2d(request: Request):
-    return templates.TemplateResponse("map2d.html", {
-        "request": request, "items_json": json.dumps(get_map_items())
-    })
+    return templates.TemplateResponse(
+        "map2d.html", {"request": request, "items_json": json.dumps(get_map_items())}
+    )
 
 
 @app.get("/map3d", response_class=HTMLResponse)
 async def map3d(request: Request):
-    return templates.TemplateResponse("map3d.html", {
-        "request": request, "items_json": json.dumps(get_map_items())
-    })
+    return templates.TemplateResponse(
+        "map3d.html", {"request": request, "items_json": json.dumps(get_map_items())}
+    )
