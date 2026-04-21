@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% macro field(label, name, value="", type="text", readonly=false, required=true, placeholder="") %}
+<div>
+  <label style="display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:#475569;text-transform:uppercase;letter-spacing:0.04em;">
+    {{ label }}{% if required and not readonly %}<span style="color:#ef4444;margin-left:2px;">*</span>{% endif %}
+  </label>
+  <input
+    type="{{ type }}"
+    name="{{ name }}"
+    value="{{ value if value is not none else '' }}"
+    placeholder="{{ placeholder }}"
+    {% if type == "number" %}step="any"{% endif %}
+    {% if readonly %}readonly{% endif %}
+    {% if required and not readonly %}required{% endif %}
+    style="width:100%;padding:9px 12px;border:1.5px solid {% if readonly %}#e2e8f0{% else %}#d1d5db{% endif %};border-radius:8px;font-size:14px;outline:none;background:{% if readonly %}#f8fafc{% else %}#fff{% endif %};color:{% if readonly %}#94a3b8{% else %}#1e293b{% endif %};transition:border-color 0.15s;"
+    onfocus="this.style.borderColor='#4f46e5'"
+    onblur="this.style.borderColor='{% if readonly %}#e2e8f0{% else %}#d1d5db{% endif %}'"
+  >
+</div>
+{% endmacro %}
+
+{% set is_edit = p is not none %}
+{% set vox = v if v else {} %}
+
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">
+  <a href="/table" style="color:#94a3b8;text-decoration:none;font-size:13px;">← Products</a>
+  <span style="color:#e2e8f0;">/</span>
+  <h1 style="margin-bottom:0;">{{ "Edit" if is_edit else "Add" }} Product</h1>
+</div>
+
+<div class="card" style="padding:32px;max-width:640px;">
+  <form method="post" action="{{ ('/product/' + p.product_id + '/edit') if is_edit else '/product/new' }}">
+
+    <div style="margin-bottom:28px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:14px;">Metadata</div>
+      <div style="display:grid;gap:14px;">
+        {{ field("Product ID", "product_id", p.product_id if is_edit else "", readonly=is_edit, placeholder="e.g. widget-alpha") }}
+        {{ field("Name", "name", p.name if is_edit else "", placeholder="e.g. Widget Alpha") }}
+        {{ field("SVG Filepath", "svg_filepath", p.svg_filepath if is_edit else "", required=false, placeholder="svgs/widget-alpha.svg") }}
+        {{ field("Description", "description", p.description if is_edit else "", required=false, placeholder="Optional description") }}
+        <div>
+          <label style="display:block;font-size:12.5px;font-weight:600;margin-bottom:5px;color:#475569;text-transform:uppercase;letter-spacing:0.04em;">Color</label>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input type="color" name="color" value="{{ p.color if is_edit else '#4f46e5' }}"
+              style="width:44px;height:36px;border:1.5px solid #d1d5db;border-radius:8px;padding:2px;cursor:pointer;">
+            <span style="font-size:13px;color:#64748b;">Used as fallback in 3D view and table</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:28px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:14px;">Voxel Position</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+        {{ field("x", "x", vox.x if vox else "", type="number", placeholder="0") }}
+        {{ field("y", "y", vox.y if vox else "", type="number", placeholder="0") }}
+        {{ field("z", "z", vox.z if (vox and vox.z is not none) else "", type="number", required=false, placeholder="optional") }}
+      </div>
+    </div>
+
+    <div style="margin-bottom:32px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:14px;">Voxel Dimensions</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+        {{ field("dx", "dx", vox.dx if vox else "", type="number", placeholder="10") }}
+        {{ field("dy", "dy", vox.dy if vox else "", type="number", placeholder="10") }}
+        {{ field("dz", "dz", vox.dz if (vox and vox.dz is not none) else "", type="number", required=false, placeholder="optional") }}
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;">
+      <button type="submit" class="btn btn-primary">
+        {{ "Save Changes" if is_edit else "Create Product" }}
+      </button>
+      <a href="/table" class="btn btn-ghost">Cancel</a>
+    </div>
+
+  </form>
+</div>
+
+{% endblock %}

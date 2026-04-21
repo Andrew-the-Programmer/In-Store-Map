@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block content %}
+
+<script>window.__ITEMS__ = {{ items_json | safe }};</script>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+  <h1>2D Map</h1>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <button onclick="fitAll()" class="btn btn-ghost" style="padding:6px 14px;font-size:13px;">Fit All</button>
+    <span style="font-size:12px;color:#94a3b8;">Scroll to zoom · Drag to pan</span>
+  </div>
+</div>
+
+<div id="map-wrap" style="background:#fff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;height:calc(100vh - 180px);position:relative;cursor:grab;"
+     style2="background-image:radial-gradient(#e2e8f0 1px, transparent 1px);background-size:24px 24px;">
+  <svg id="svg" width="100%" height="100%"
+       style="display:block;background-image:radial-gradient(circle,#cbd5e1 1px,transparent 1px);background-size:24px 24px;">
+    <g id="root">
+      <g id="items"></g>
+    </g>
+  </svg>
+  <div id="tip" style="position:absolute;background:rgba(15,23,42,0.85);color:#f8fafc;padding:7px 11px;border-radius:7px;font-size:12px;font-family:monospace;pointer-events:none;display:none;backdrop-filter:blur(4px);line-height:1.6;"></div>
+  <div style="position:absolute;bottom:14px;right:14px;background:rgba(255,255,255,0.9);border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:11.5px;color:#64748b;backdrop-filter:blur(4px);">
+    <span id="zoom-label">100%</span>
+  </div>
+</div>
+
+<script>
+const ITEMS = window.__ITEMS__;
+const svg   = document.getElementById("svg");
+const root  = document.getElementById("root");
+const layer = document.getElementById("items");
+const tip   = document.getElementById("tip");
+const zoomLabel = document.getElementById("zoom-label");
+
+let tx = 0, ty = 0, sc = 1;
+let drag = false, ox, oy, otx, oty;
+
+function applyT() {
+  root.setAttribute("transform", `translate(${tx},${ty}) scale(${sc})`);
+  zoomLabel.textContent = Math.round(sc * 100) + "%";
+}
+
+function render() {
+  layer.innerHTML = "";
+  if (!ITEMS.length) {
+    const t = document.createElementNS("http://www.w3.org/2000/svg","text");
+    t.setAttribute("x", svg.clientWidth / 2);
+    t.setAttribute("y", svg.clientHeight / 2);
+    t.setAttribute("text-anchor","middle");
+    t.setAttribute("fill","#94a3b8");
+    t.setAttribute("font-size","15");
+    t.setAttribute("font-family","system-ui");
+    t.textContent = "No products — add some first";
+    layer.appendChild(t);
+    return;
+  }
+
+  ITEMS.forEach(item => {
+    const x  = item.x  ?? 0,  y  = item.y  ?? 0;
+    const dx = item.dx ?? 50, dy = item.dy ?? 50;
+    const color = item.color || "#4f46e5";
+
+    const g = document.createElementNS("http://www.w3.org/2000/svg","g");
+    g.setAttribute("transform", `translate(${x},${y})`);
+    g.style.cursor = "pointer";
+
+    // shadow rect
+    const shadow = document.createElementNS("http://www.w3.org/2000/svg","rect");
+    shadow.setAttribute("x","2"); shadow.setAttribute("y","3");
+    shadow.setAttribute("width", dx); shadow.setAttribute("height", dy);
+    shadow.setAttribute("rx","3"); shadow.setAttribute("fill","rgba(0,0,0,0.08)");
+    g.appendChild(shadow);
+
+    // background rect
+    const bg = document.createElementNS("http://www.w3.org/2000/svg","rect");
+    bg.setAttribute("width", dx); bg.setAttribute("height", dy);
+    bg.setAttribute("rx","3");
+    bg.setAttribute("fill", color + "22");
+    bg.setAttribute("stroke", color);
+    bg.setAttribute("stroke-width","1.5");
+    g.appendChild(bg);
+
+    // SVG image overlay
+    if (item.svg_filepath) {
+      const img = document.createElementNS("http://www.w3.org/2000/svg","image");
+      img.setAttribute("href", "/static/" + item.svg_filepath);
+      img.setAttribute("x","0"); img.setAttribute("y","0");
+      img.setAttribute("width", dx); img.setAttribute("height", dy);
+      img.setAttribute("preserveAspectRatio","xMidYMid meet");
+      img.setAttribute("clip-path",`inset(0 round 3px)`);
+      g.appendChild(img);
+    }
+
+    // label below box
+    const lbl = document.createElementNS("http://www.w3.org/2000/svg","text");
+    lbl.setAttribute("x", dx / 2);
+    lbl.setAttribute("y", dy + 13);
+    lbl.setAttribute("text-anchor","middle");
+    lbl.setAttribute("font-size","9");
+    lbl.setAttribute("font-weight","600");
+    lbl.setAttribute("fill","#475569");
+    lbl.setAttribute("font-family","system-ui");
+    lbl.textContent = item.name;
+    g.appendChild(lbl);
+
+    // id label top-left
+    const id_lbl = document.createElementNS("http://www.w3.org/2000/svg","text");
+    id_lbl.setAttribute("x","4"); id_lbl.setAttribute("y","11");
+    id_lbl.setAttribute("font-size","7");
+    id_lbl.setAttribute("fill", color);
+    id_lbl.setAttribute("font-family","monospace");
+    id_lbl.setAttribute("font-weight","700");
+    id_lbl.textContent = item.product_id;
+    g.appendChild(id_lbl);
+
+    g.addEventListener("mouseenter", () => {
+      bg.setAttribute("fill", color + "44");
+    });
+    g.addEventListener("mouseleave", () => {
+      bg.setAttribute("fill", color + "22");
+      tip.style.display = "none";
+    });
+    g.addEventListener("mousemove", (e) => {
+      const r = svg.getBoundingClientRect();
+      tip.style.left = (e.clientX - r.left + 14) + "px";
+      tip.style.top  = (e.clientY - r.top - 10) + "px";
+      tip.style.display = "block";
+      tip.innerHTML = `<b>${item.product_id}</b> — ${item.name}<br>pos (${item.x}, ${item.y}${item.z != null ? ", " + item.z : ""})<br>size ${item.dx} × ${item.dy}${item.dz != null ? " × " + item.dz : ""}`;
+    });
+
+    layer.appendChild(g);
+  });
+}
+
+function fitAll() {
+  if (!ITEMS.length) { tx = 40; ty = 40; sc = 1; applyT(); return; }
+  const W = svg.clientWidth, H = svg.clientHeight;
+  const allX = ITEMS.flatMap(i => [i.x ?? 0, (i.x ?? 0) + (i.dx ?? 50)]);
+  const allY = ITEMS.flatMap(i => [i.y ?? 0, (i.y ?? 0) + (i.dy ?? 50)]);
+  const minX = Math.min(...allX), maxX = Math.max(...allX);
+  const minY = Math.min(...allY), maxY = Math.max(...allY);
+  const pad = 64;
+  sc = Math.min((W - pad * 2) / (maxX - minX || 1), (H - pad * 2) / (maxY - minY || 1), 8);
+  tx = (W - (maxX - minX) * sc) / 2 - minX * sc;
+  ty = (H - (maxY - minY) * sc) / 2 - minY * sc;
+  applyT();
+}
+
+svg.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const r = svg.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const f = e.deltaY < 0 ? 1.12 : 0.89;
+  tx = mx - (mx - tx) * f;
+  ty = my - (my - ty) * f;
+  sc = Math.max(0.05, Math.min(sc * f, 40));
+  applyT();
+}, { passive: false });
+
+svg.addEventListener("mousedown", (e) => {
+  drag = true; ox = e.clientX; oy = e.clientY; otx = tx; oty = ty;
+  svg.style.cursor = "grabbing";
+});
+window.addEventListener("mousemove", (e) => {
+  if (!drag) return;
+  tx = otx + (e.clientX - ox);
+  ty = oty + (e.clientY - oy);
+  applyT();
+});
+window.addEventListener("mouseup", () => { drag = false; svg.style.cursor = "grab"; });
+
+render();
+fitAll();
+</script>
+
+{% endblock %}

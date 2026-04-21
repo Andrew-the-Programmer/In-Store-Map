@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block content %}
+
+<script>window.__ITEMS__ = {{ items_json | safe }};</script>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+  <h1>3D Map</h1>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <button id="btn-reset" class="btn btn-ghost" style="padding:6px 14px;font-size:13px;">Reset Camera</button>
+    <span style="font-size:12px;color:#94a3b8;">Drag to orbit · Scroll to zoom · Right-drag to pan</span>
+  </div>
+</div>
+
+<div class="card" style="overflow:hidden;height:calc(100vh - 180px);position:relative;">
+  <div id="three" style="width:100%;height:100%;"></div>
+  <div id="tip3d" style="position:absolute;top:14px;left:14px;background:rgba(15,23,42,0.82);color:#f8fafc;padding:8px 12px;border-radius:8px;font-size:12px;font-family:monospace;backdrop-filter:blur(6px);line-height:1.7;display:none;max-width:260px;pointer-events:none;"></div>
+</div>
+
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.128.0/build/three.module.js';
+import { OrbitControls } from 'https://unpkg.com/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+
+const ITEMS = window.__ITEMS__;
+const container = document.getElementById("three");
+const tip = document.getElementById("tip3d");
+
+// Scene
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf8fafc);
+scene.fog = new THREE.FogExp2(0xf8fafc, 0.0008);
+
+// Camera
+const W = container.clientWidth, H = container.clientHeight;
+const camera = new THREE.PerspectiveCamera(55, W / H, 0.1, 20000);
+
+// Renderer
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+// Controls
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.screenSpacePanning = false;
+controls.minDistance = 1;
+controls.maxDistance = 5000;
+
+// Lights
+const ambient = new THREE.AmbientLight(0xffffff, 0.65);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+sun.position.set(80, 120, 60);
+sun.castShadow = true;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xc7d2fe, 0.3);
+fill.position.set(-60, 40, -60);
+scene.add(fill);
+
+// Grid floor
+const grid = new THREE.GridHelper(2000, 80, 0xd1d5db, 0xe5e7eb);
+grid.position.y = 0;
+scene.add(grid);
+
+// Texture loader
+const loader = new THREE.TextureLoader();
+const meshes = [];
+
+ITEMS.forEach(item => {
+  // Coordinate mapping:
+  //   data (x, y) -> Three.js (X, Z)  [horizontal plane]
+  //   data z      -> Three.js Y        [height / up]
+  const px  = item.x  ?? 0,   py  = item.y  ?? 0,   pz  = item.z  ?? 0;
+  const ddx = item.dx ?? 10,  ddy = item.dy ?? 10,  ddz = item.dz ?? 2;
+
+  const geometry = new THREE.BoxGeometry(ddx, ddz, ddy);
+
+  let material;
+  if (item.svg_filepath) {
+    const tex = loader.load(
+      "/static/" + item.svg_filepath,
+      () => renderer.render(scene, camera),   // re-render when loaded
+      undefined,
+      () => {  // fallback if SVG fails to load
+        mesh.material = makeFallbackMat(item.color);
+      }
+    );
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    // Apply SVG texture to top face (index 2), solid color to sides
+    material = [
+      makeFallbackMat(item.color),   // +X
+      makeFallbackMat(item.color),   // -X
+      new THREE.MeshLambertMaterial({ map: tex }),  // +Y (top)
+      makeFallbackMat(item.color),   // -Y (bottom)
+      makeFallbackMat(item.color),   // +Z
+      makeFallbackMat(item.color),   // -Z
+    ];
+  } else {
+    material = makeFallbackMat(item.color);
+  }
+
+  const mesh = new THREE.Mesh(geometry, material);
+  // Position so corner is at (px, pz, py) and box extends positively
+  mesh.position.set(px + ddx / 2, pz + ddz / 2, py + ddy / 2);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.userData = item;
+  scene.add(mesh);
+  meshes.push(mesh);
+
+  // Wireframe edges
+  const edges = new THREE.EdgesGeometry(geometry);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.25 });
+  mesh.add(new THREE.LineSegments(edges, lineMat));
+});
+
+function makeFallbackMat(hex) {
+  const c = new THREE.Color(hex || "#4f46e5");
+  return new THREE.MeshLambertMaterial({ color: c });
+}
+
+// Camera fit
+function resetCamera() {
+  if (!ITEMS.length) {
+    camera.position.set(0, 80, 120);
+    controls.target.set(0, 0, 0);
+  } else {
+    const xs = ITEMS.map(i => (i.x ?? 0) + (i.dx ?? 10) / 2);
+    const ys = ITEMS.map(i => (i.y ?? 0) + (i.dy ?? 10) / 2);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const span = Math.max(
+      Math.max(...xs) - Math.min(...xs),
+      Math.max(...ys) - Math.min(...ys),
+      20
+    );
+    camera.position.set(cx - span * 0.6, span * 1.1, cy + span * 1.3);
+    controls.target.set(cx, 0, cy);
+  }
+  controls.update();
+}
+resetCamera();
+document.getElementById("btn-reset").onclick = resetCamera;
+
+// Raycaster hover tooltip
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+renderer.domElement.addEventListener("mousemove", (e) => {
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.x =  ((e.clientX - r.left)  / r.width)  * 2 - 1;
+  mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(meshes);
+  if (hits.length) {
+    const d = hits[0].object.userData;
+    tip.style.display = "block";
+    tip.innerHTML = `<b>${d.product_id}</b> — ${d.name}<br>`
+      + `pos (${d.x}, ${d.y}${d.z != null ? ", " + d.z : ""})<br>`
+      + `size ${d.dx} × ${d.dy}${d.dz != null ? " × " + d.dz : ""}`;
+  } else {
+    tip.style.display = "none";
+  }
+});
+
+// Resize
+window.addEventListener("resize", () => {
+  const nW = container.clientWidth, nH = container.clientHeight;
+  camera.aspect = nW / nH;
+  camera.updateProjectionMatrix();
+  renderer.setSize(nW, nH);
+});
+
+// Animate
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+
+{% endblock %}
