@@ -1,8 +1,9 @@
 [
   {
     "product_id": "1234",
-    "name": "Bread",
+    "name": "Product example",
     "svg_filepath": "",
     "description": "",
-  },
+    "tags": []
+  }
 ]
