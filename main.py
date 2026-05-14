@@ -81,10 +81,10 @@ async def create_product(
     color: str = Form("#4f46e5"),
     x: float = Form(...),
     y: float = Form(...),
-    z: Optional[str] = Form(None),
+    z: Optional[str] = Form(0),
     dx: float = Form(...),
     dy: float = Form(...),
-    dz: Optional[str] = Form(None),
+    dz: Optional[str] = Form(0),
 ):
     products = read_json(PRODUCTS_FILE)
     if any(p["product_id"] == product_id for p in products):
